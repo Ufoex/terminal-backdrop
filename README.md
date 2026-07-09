@@ -62,17 +62,21 @@ bound to whatever key combo you like (e.g. `Ctrl+Alt+T`).
 
 The background window doesn't have to run `cmatrix` — swap the `xterm ... -e cmatrix` line near the top of the script for any other terminal program you want running behind your real terminal (e.g. `-e htop`, `-e /some/animation.sh`, `-e neofetch --loop`, etc). Everything else (positioning, focus, stacking) keeps working the same way.
 
-### Bonus: `ghost-bg.sh` — Ghostty's ghost as the background
+### Bonus: `ghost-bg.sh` — Ghostty's animated ghost as the background
 
-`ghost-bg.sh` is a ready-to-run example of exactly that: same script, but instead of `cmatrix` it shows [Ghostty](https://ghostty.org)'s ghost mascot rendered as ANSI art with [`chafa`](https://hpjansson.org/chafa/).
+`ghost-bg.sh` is a ready-to-run example of exactly that: same script, but instead of `cmatrix` it plays the little ghost animation from the [Ghostty](https://ghostty.org) homepage in the background.
 
 ```bash
-sudo apt install chafa
 ./ghost-bg.sh
 ```
 
-- `ghost-ansi.sh` draws `assets/ghost.png` full-screen with `chafa` and only redraws on an actual terminal resize (`SIGWINCH` — the same signal the kernel already sends on every pty resize, no polling added).
-- The ghost artwork (`assets/ghost.png`) belongs to the [Ghostty project](https://ghostty.org), included here just for this fan-made effect — all credit to them.
+No extra dependency needed — `ghost-ansi.sh` just prints pre-recorded frames (`assets/ghost-frames.txt.gz`) in a loop with plain ANSI codes.
+
+- The 235 animation frames are the *actual* frame data Ghostty's homepage sends to the browser to draw that ghost (found embedded in its page as plain text grids) — same art, same animation, just played in a real terminal instead of a `<code>` block in the browser.
+- The original data has no color, just a `<span class="b">` bold flag — the color gradient (dark teal to bright icy cyan, based on each character's visual density) is my own addition, not Ghostty's.
+- The animation is automatically centered in the terminal (it's a fixed 100×41 grid), and re-centers on resize.
+- The playback speed (`FRAME_DELAY` in `ghost-ansi.sh`) is a guess on my part — the original frame rate lives in Ghostty's compiled JS, not in the frame data itself. Tune it if it feels off.
+- This artwork and animation belong to the [Ghostty project](https://ghostty.org), extracted here only for this fan-made effect — all credit to them.
 
 ## How it works (short version)
 

@@ -62,17 +62,21 @@ asignado a la combinación de teclas que prefieras (por ejemplo `Ctrl+Alt+T`).
 
 La ventana de fondo no tiene por qué correr `cmatrix` — cambiá la línea `xterm ... -e cmatrix` cerca del principio del script por cualquier otro programa de terminal que quieras tener corriendo detrás de tu terminal real (por ejemplo `-e htop`, `-e /algun/script-de-animacion.sh`, `-e neofetch --loop`, etc). Todo lo demás (posición, foco, orden de apilado) sigue funcionando igual.
 
-### Bonus: `ghost-bg.sh` — el fantasma de Ghostty como fondo
+### Bonus: `ghost-bg.sh` — el fantasma animado de Ghostty como fondo
 
-`ghost-bg.sh` es un ejemplo ya armado de justo eso: el mismo script, pero en vez de `cmatrix` muestra la mascota fantasma de [Ghostty](https://ghostty.org) renderizada como arte ANSI con [`chafa`](https://hpjansson.org/chafa/).
+`ghost-bg.sh` es un ejemplo ya armado de justo eso: el mismo script, pero en vez de `cmatrix` reproduce, de fondo, la animación del fantasma que aparece en la home de [Ghostty](https://ghostty.org).
 
 ```bash
-sudo apt install chafa
 ./ghost-bg.sh
 ```
 
-- `ghost-ansi.sh` dibuja `assets/ghost.png` ocupando toda la terminal con `chafa`, y solo la vuelve a dibujar cuando la terminal realmente cambia de tamaño (`SIGWINCH` — la misma señal que el kernel ya manda en cada resize de una pty, sin agregar sondeo).
-- El arte del fantasma (`assets/ghost.png`) es del [proyecto Ghostty](https://ghostty.org), incluido acá solo para este efecto hecho por fan — todo el crédito es de ellos.
+No hace falta instalar nada aparte — `ghost-ansi.sh` solo imprime cuadros pregrabados (`assets/ghost-frames.txt.gz`) en bucle, con códigos ANSI comunes.
+
+- Los 235 cuadros de la animación son los datos *reales* que la home de Ghostty le manda al navegador para dibujar ese fantasma (los encontré incrustados en la página como grillas de texto plano) — el mismo arte, la misma animación, solo que reproducida en una terminal real en vez de un bloque `<code>` del navegador.
+- Los datos originales no tienen color, solo un flag de negrita (`<span class="b">`) — el degradé de color (de teal oscuro a celeste brillante bien vivo, según la densidad visual de cada carácter) es un agregado mío, no de Ghostty.
+- La animación queda centrada automáticamente en la terminal (es una grilla fija de 100×41), y se recentra si redimensionás.
+- La velocidad de reproducción (`FRAME_DELAY` en `ghost-ansi.sh`) es una aproximación mía — el FPS original vive en el JS compilado de Ghostty, no en los datos de los cuadros en sí. Ajustalo si se siente mal.
+- Este arte y esta animación son del [proyecto Ghostty](https://ghostty.org), extraídos acá solo para este efecto hecho por fan — todo el crédito es de ellos.
 
 ## Cómo funciona (versión corta)
 

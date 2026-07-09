@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Igual que cmatrix-bg.sh, pero de fondo en vez de "cmatrix" muestra el
-# fantasma de Ghostty (https://ghostty.org) como arte ANSI (ver ghost-ansi.sh
-# y assets/ghost.png). Al mover/redimensionar la de adelante, la de atrás la
+# animación del fantasma de la home de Ghostty (https://ghostty.org),
+# reproducida como arte ANSI (ver ghost-ansi.sh y assets/ghost-frames.txt.gz).
+# Al mover/redimensionar la de adelante, la de atrás la
 # sigue automáticamente.
 #
 # Uso: ./ghost-bg.sh [opacidad 0.0-1.0]
@@ -59,7 +60,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-for bin in xterm alacritty wmctrl xdotool xev chafa; do
+for bin in xterm alacritty wmctrl xdotool xev zcat; do
     command -v "$bin" >/dev/null || { echo "Falta '$bin'. Instalalo con: sudo apt install $bin" >&2; exit 1; }
 done
 
