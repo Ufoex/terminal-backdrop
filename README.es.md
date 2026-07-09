@@ -62,6 +62,18 @@ asignado a la combinación de teclas que prefieras (por ejemplo `Ctrl+Alt+T`).
 
 La ventana de fondo no tiene por qué correr `cmatrix` — cambiá la línea `xterm ... -e cmatrix` cerca del principio del script por cualquier otro programa de terminal que quieras tener corriendo detrás de tu terminal real (por ejemplo `-e htop`, `-e /algun/script-de-animacion.sh`, `-e neofetch --loop`, etc). Todo lo demás (posición, foco, orden de apilado) sigue funcionando igual.
 
+### Bonus: `ghost-bg.sh` — el fantasma de Ghostty como fondo
+
+`ghost-bg.sh` es un ejemplo ya armado de justo eso: el mismo script, pero en vez de `cmatrix` muestra la mascota fantasma de [Ghostty](https://ghostty.org) renderizada como arte ANSI con [`chafa`](https://hpjansson.org/chafa/).
+
+```bash
+sudo apt install chafa
+./ghost-bg.sh
+```
+
+- `ghost-ansi.sh` dibuja `assets/ghost.png` ocupando toda la terminal con `chafa`, y solo la vuelve a dibujar cuando la terminal realmente cambia de tamaño (`SIGWINCH` — la misma señal que el kernel ya manda en cada resize de una pty, sin agregar sondeo).
+- El arte del fantasma (`assets/ghost.png`) es del [proyecto Ghostty](https://ghostty.org), incluido acá solo para este efecto hecho por fan — todo el crédito es de ellos.
+
 ## Cómo funciona (versión corta)
 
 - Dos ventanas independientes: la terminal real adelante, un `xterm` decorativo atrás.

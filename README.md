@@ -62,6 +62,18 @@ bound to whatever key combo you like (e.g. `Ctrl+Alt+T`).
 
 The background window doesn't have to run `cmatrix` — swap the `xterm ... -e cmatrix` line near the top of the script for any other terminal program you want running behind your real terminal (e.g. `-e htop`, `-e /some/animation.sh`, `-e neofetch --loop`, etc). Everything else (positioning, focus, stacking) keeps working the same way.
 
+### Bonus: `ghost-bg.sh` — Ghostty's ghost as the background
+
+`ghost-bg.sh` is a ready-to-run example of exactly that: same script, but instead of `cmatrix` it shows [Ghostty](https://ghostty.org)'s ghost mascot rendered as ANSI art with [`chafa`](https://hpjansson.org/chafa/).
+
+```bash
+sudo apt install chafa
+./ghost-bg.sh
+```
+
+- `ghost-ansi.sh` draws `assets/ghost.png` full-screen with `chafa` and only redraws on an actual terminal resize (`SIGWINCH` — the same signal the kernel already sends on every pty resize, no polling added).
+- The ghost artwork (`assets/ghost.png`) belongs to the [Ghostty project](https://ghostty.org), included here just for this fan-made effect — all credit to them.
+
 ## How it works (short version)
 
 - Two independent top-level windows: the real terminal in front, a decorative `xterm` behind.
