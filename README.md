@@ -1,8 +1,8 @@
-# cmatrix-background
+# terminal-backdrop
 
 *[Leer en español](README.es.md)*
 
-A small X11 script that opens a transparent terminal with a live [`cmatrix`](https://github.com/abishekvashok/cmatrix) "digital rain" effect glued to it as a background. Move, resize, minimize, maximize or focus the terminal and the matrix effect follows it automatically — as if your terminal were see-through.
+A small X11 script that opens a transparent terminal with **any live terminal effect** glued to it as a background — [`cmatrix`](https://github.com/abishekvashok/cmatrix)'s digital rain by default, but really any terminal program works (see [Using something other than `cmatrix`](#using-something-other-than-cmatrix) below). Move, resize, minimize, maximize or focus the terminal and the background effect follows it automatically — as if your terminal were see-through.
 
 It's event-driven (no polling loop), so it sits at ~0% CPU while idle and reacts instantly via X11 events.
 
@@ -22,7 +22,7 @@ sudo apt install xterm alacritty wmctrl xdotool x11-utils cmatrix
 - `xterm` — hosts the `cmatrix` background window.
 - `alacritty` — the actual, usable transparent terminal in front.
 - `wmctrl`, `xdotool` — reposition/resize/restack the background window.
-- `xev`, `xprop` (from `x11-utils`) — listen for window move/resize/focus/maximize events instead of polling.
+- `xev`, `xprop`, `xwininfo` (from `x11-utils`) — listen for window move/resize/focus/maximize events instead of polling, and measure each window's real decoration size for auto-alignment.
 - `cmatrix` — the digital rain effect itself.
 
 Works on X11 (or XWayland). The script forces `alacritty` off native Wayland (`env -u WAYLAND_DISPLAY`) since it needs to query/move the window with X11 tools.
@@ -87,11 +87,7 @@ No extra dependency needed — `ghost-ansi.sh` just prints pre-recorded frames (
 
 ## Tuning
 
-A few constants near the top of the script may need recalibrating for your setup:
-
-- `OFFSET_X` / `OFFSET_Y` — pixel offset between the two windows so the background exactly matches the front window's content area (varies per system/theme).
-- `OFFSET_X_MAX` / `OFFSET_Y_MAX` — offset used while maximized.
-- `MONITOR3_X_MIN` — used to pick a different maximized offset on very wide/high-DPI monitors.
+The pixel offset between the two windows (needed because the borderless background window and the decorated front window render slightly differently depending on system/theme/monitor) is no longer a hand-tuned constant — the script measures it itself at startup by comparing both windows' actual reported geometry, and re-measures it per-monitor the first time you maximize on each screen. Nothing to recalibrate manually, and it adapts automatically to any number of monitors.
 
 ## License
 

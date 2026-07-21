@@ -19,18 +19,27 @@ FRONT_TITLE="cmatrix-front-$TAG"
 START_X=250
 START_Y=400
 
-# Corrección empírica: en este equipo la ventana de atrás termina
-# renderizada un poco más a la derecha y más abajo de lo que reportan
-# wmctrl/xdotool, y el desfase cambia según el monitor y según si la
-# ventana está maximizada o no. Calibrado a mano por pantalla.
-# Monitor grande (x >= 3200) maximizado necesita un offset propio.
-OFFSET_X=27
-OFFSET_Y=63
-OFFSET_X_MAX=3
-OFFSET_Y_MAX=44
-OFFSET_X_MAX_M3=-1
-OFFSET_Y_MAX_M3=37
-MONITOR3_X_MIN=3200
+# El inset de decoración de la ventana de adelante (cuánto hay que
+# descontarle a su posición reportada para llegar a la esquina de su
+# cuadrícula de texto, no a la de su marco/barra de título) cambia según el
+# equipo, el tema, el monitor y si está maximizada o no. En vez de
+# hardcodear constantes calibradas a mano para una sola máquina, se mide en
+# caliente (ver window_decoration_inset más abajo), así el script se
+# autocalibra en cualquier equipo y con cualquier cantidad de monitores.
+OFFSET_X=0
+OFFSET_Y=0
+
+# Caché del offset de maximizado por monitor, en disco (no en un array
+# asociativo en memoria): reposition() corre en tres procesos bash
+# independientes (el principal, el listener de xev y el de xprop -spy, cada
+# uno en su propio subshell por el "&" final), y un array en memoria de uno
+# no es visible para los otros — cada proceso recalibraría por su cuenta y
+# el que escribiera la ventana de atrás último ganaría con una lectura
+# potencialmente vieja, dando una posición inconsistente. Un archivo
+# compartido con flock evita esa carrera entre procesos.
+MAX_OFFSET_FILE="/tmp/.cmatrix-maxoff-$TAG"
+MAX_OFFSET_LOCK="/tmp/.cmatrix-maxoff-lock-$TAG"
+: > "$MAX_OFFSET_FILE"
 
 BACK_PID=""
 FRONT_PID=""
@@ -52,11 +61,11 @@ cleanup() {
     [[ -n "$SPY_SRC_PID" ]] && kill "$SPY_SRC_PID" 2>/dev/null
     [[ -n "$BACK_PID" ]] && kill "$BACK_PID" 2>/dev/null
     [[ -n "$FRONT_PID" ]] && kill "$FRONT_PID" 2>/dev/null
-    rm -f "$MAX_FLAG" "$XEV_FIFO" "$SPY_FIFO"
+    rm -f "$MAX_FLAG" "$XEV_FIFO" "$SPY_FIFO" "$MAX_OFFSET_FILE" "$MAX_OFFSET_LOCK"
 }
 trap cleanup EXIT INT TERM
 
-for bin in xterm alacritty wmctrl xdotool xev cmatrix xrandr; do
+for bin in xterm alacritty wmctrl xdotool xev xwininfo cmatrix xrandr; do
     command -v "$bin" >/dev/null || { echo "Falta '$bin'. Instalalo con: sudo apt install $bin" >&2; exit 1; }
 done
 
@@ -67,8 +76,10 @@ done
 # adentro. Se calcula una sola vez: no cambia mientras corre el script.
 read -r SCREEN_W SCREEN_H < <(xrandr --query | awk '/^Screen/{gsub(",","",$10); print $8, $10}')
 
-# Ventana de atrás: cmatrix puro en xterm (X11 nativo).
-xterm -title "$BACK_TITLE" -bg black -fg green -geometry "+$((START_X-OFFSET_X))+$((START_Y-OFFSET_Y))" -e cmatrix &
+# Ventana de atrás: cmatrix puro en xterm (X11 nativo). Arranca en la misma
+# posición nominal que la de adelante; measure_normal_offset la corrige
+# apenas ambas ventanas están mapeadas.
+xterm -title "$BACK_TITLE" -bg black -fg green -geometry "+$START_X+$START_Y" -e cmatrix &
 BACK_PID=$!
 
 # Ventana de adelante: shell normal, forzada a X11 (para poder moverla/medirla)
@@ -130,6 +141,86 @@ PAD_H=$(( ${INC_H:-1} > 0 ? ${INC_H:-1} - 1 : 0 ))
 echo "Listo. Mueve o redimensiona la ventana transparente y cmatrix la va a seguir."
 echo "Cierra esa ventana (la de adelante) para terminar todo."
 
+# Orígenes X de cada monitor conectado (para keyear el offset de maximizado
+# por monitor: paneles/DPI distintos entre pantallas pueden dar desfases
+# distintos al maximizar en una u otra). Se calcula una sola vez.
+MONITOR_ORIGINS=()
+while IFS= read -r origin; do
+    MONITOR_ORIGINS+=("$origin")
+done < <(xrandr --query | grep -oE '[0-9]+x[0-9]+\+[0-9]+\+[0-9]+' | awk -F'+' '{print $2}' | sort -n -u)
+
+# Dado un X absoluto, devuelve el origen del monitor al que pertenece (el
+# mayor origen de monitor que sea <= X). Asume monitores en fila horizontal,
+# igual que el resto del script.
+monitor_key() {
+    local x="$1" best=0 origin
+    for origin in "${MONITOR_ORIGINS[@]}"; do
+        (( origin <= x )) && best="$origin"
+    done
+    echo "$best"
+}
+
+# Archivo de diagnóstico persistente: cuando el script corre desde un atajo
+# de teclado (ver README, "bash -c '... >/dev/null 2>&1'"), cualquier aviso
+# por stderr se pierde para siempre. Este log queda en disco pase lo que
+# pase, para poder auditar una calibración rara después de los hechos.
+DEBUG_LOG="/tmp/cmatrix-bg-debug.log"
+dbg() { echo "[$TAG] $*" >> "$DEBUG_LOG" 2>/dev/null; }
+
+# Tamaño real de la decoración (barra de título + borde) de una ventana: la
+# diferencia entre su posición y la de su padre inmediato (el frame que
+# dibuja el WM), tal como lo reporta xwininfo ("Relative upper-left").
+# Deliberadamente NO se usa "xdotool getwindowgeometry" para esto: en este
+# equipo, para una ventana con frame, xdotool devuelve una traducción de
+# coordenadas que ya trae este mismo inset sumado una vez de más (verificado
+# a mano comparando ambas herramientas sobre la misma ventana) — usarlo para
+# calibrar terminaba sumando el inset dos veces, empujando el fondo hacia la
+# esquina de arriba/izquierda (donde están los botones) en vez de a la
+# esquina de la cuadrícula de texto. xwininfo lo da directo, sin ese lío.
+window_decoration_inset() {
+    local info ix iy
+    info="$(xwininfo -id "$1" 2>/dev/null)" || return 1
+    ix="$(awk -F': *' '/Relative upper-left X/{print $2}' <<< "$info")"
+    iy="$(awk -F': *' '/Relative upper-left Y/{print $2}' <<< "$info")"
+    [[ -n "$ix" && -n "$iy" ]] || return 1
+    echo "$ix $iy"
+}
+
+# Mide el inset de decoración de la ventana de adelante en estado normal.
+# Al ser una propiedad de la ventana en sí (no una comparación contra la de
+# atrás), no hace falta esperar a que la de atrás exista ni reintentar por
+# posibles estados transitorios.
+measure_normal_offset() {
+    local ix iy
+    read -r ix iy < <(window_decoration_inset "$FRONT_WID") || return 1
+    OFFSET_X=$ix
+    OFFSET_Y=$iy
+    dbg "offset normal (inset real de decoración): $OFFSET_X,$OFFSET_Y"
+}
+
+# Da "OX OY" para un monitor, calibrando y guardando en el archivo
+# compartido la primera vez que hace falta (ver el comentario de
+# MAX_OFFSET_FILE más arriba sobre por qué es un archivo con flock y no un
+# array en memoria). Todo el check-then-set queda bajo un mismo lock, así
+# dos procesos que lleguen a la vez no calibran cada uno por su cuenta.
+resolve_max_offset() {
+    local key="$1" line ix iy
+    exec 9>>"$MAX_OFFSET_LOCK"
+    flock -x 9
+    line="$(awk -v k="$key" '$1==k{print; exit}' "$MAX_OFFSET_FILE" 2>/dev/null)"
+    if [[ -z "$line" ]]; then
+        read -r ix iy < <(window_decoration_inset "$FRONT_WID")
+        ix="${ix:-0}"; iy="${iy:-0}"
+        line="$key $ix $iy"
+        echo "$line" >> "$MAX_OFFSET_FILE"
+        dbg "offset maximizado (monitor x=$key): $ix,$iy"
+    fi
+    exec 9>&-
+    echo "$line"
+}
+
+measure_normal_offset || { echo "Aviso: no pude autocalibrar el offset, uso 0,0." >&2; dbg "autocalibración FALLÓ, quedó en 0,0"; }
+
 # Estado inicial de maximizado (0/1), cacheado en un archivo para no forkear
 # xprop en cada movimiento: solo cambia en el raro caso de maximizar/restaurar.
 STATE0="$(xprop -id "$FRONT_WID" _NET_WM_STATE 2>/dev/null)"
@@ -142,16 +233,19 @@ fi
 # Reubica la de atrás según la geometría actual de la de adelante y el flag
 # de maximizado cacheado (evita forkear xprop en cada evento de movimiento).
 reposition() {
-    local GEO OX OY MAXIMIZED BX BY BW BH
+    local GEO OX OY MAXIMIZED BX BY BW BH KEY LINE
     GEO="$(xdotool getwindowgeometry --shell "$FRONT_WID" 2>/dev/null)" || return 1
     eval "$GEO"
     read -r MAXIMIZED < "$MAX_FLAG"
     if [[ "$MAXIMIZED" == "1" ]]; then
-        if (( X >= MONITOR3_X_MIN )); then
-            OX=$OFFSET_X_MAX_M3; OY=$OFFSET_Y_MAX_M3
-        else
-            OX=$OFFSET_X_MAX; OY=$OFFSET_Y_MAX
-        fi
+        KEY="$(monitor_key "$X")"
+        LINE="$(resolve_max_offset "$KEY")"
+        read -r _ OX OY <<< "$LINE"
+        OX="${OX:-0}"; OY="${OY:-0}"
+        # resolve_max_offset puede tardar un instante si calibra recién;
+        # releer la geometría para no terminar posicionando con una lectura
+        # de X/Y ya vieja.
+        GEO="$(xdotool getwindowgeometry --shell "$FRONT_WID" 2>/dev/null)" && eval "$GEO"
     else
         OX=$OFFSET_X; OY=$OFFSET_Y
     fi
@@ -164,10 +258,24 @@ reposition() {
     # inicio), aunque la de adelante esté parcialmente afuera.
     BW=$((WIDTH+PAD_W)); BH=$((HEIGHT+PAD_H))
     BX=$((X-OX)); BY=$((Y-OY))
-    (( BX < 0 )) && BX=0
-    (( BY < 0 )) && BY=0
-    (( BX + BW > SCREEN_W )) && BX=$((SCREEN_W - BW))
-    (( BY + BH > SCREEN_H )) && BY=$((SCREEN_H - BH))
+    # Si se pasa de CUALQUIER borde, recortar el TAMAÑO correspondiente y
+    # nunca "correr" la esquina opuesta: la posición es la que mantiene
+    # alineada la esquina de la cuadrícula de texto con la de adelante.
+    # - Borde derecho/inferior (ventana grande o maximizada, ver más abajo):
+    #   ya está en su lugar, solo hace falta achicar el ancho/alto sobrante.
+    # - Borde izquierdo/superior (de adelante arrastrada parcialmente fuera
+    #   de pantalla): acá SÍ hay que mover BX/BY a 0 (no se puede dibujar en
+    #   coordenadas negativas), pero eso corta un pedazo del lado izquierdo/
+    #   de arriba — sin restarle ese mismo pedazo al ancho/alto, la de atrás
+    #   quedaba con su tamaño COMPLETO pegada al borde, sobrando bien a la
+    #   derecha/abajo de lo que la de adelante realmente muestra en pantalla
+    #   (el bug que se ve al arrastrar la ventana fuera por la izquierda).
+    if (( BX < 0 )); then BW=$((BW+BX)); BX=0; fi
+    if (( BY < 0 )); then BH=$((BH+BY)); BY=0; fi
+    (( BW < 0 )) && BW=0
+    (( BH < 0 )) && BH=0
+    (( BX + BW > SCREEN_W )) && BW=$((SCREEN_W - BX))
+    (( BY + BH > SCREEN_H )) && BH=$((SCREEN_H - BY))
     wmctrl -i -r "$BACK_WID" -e "0,$BX,$BY,$BW,$BH"
 }
 

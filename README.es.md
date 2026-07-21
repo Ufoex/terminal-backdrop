@@ -1,8 +1,8 @@
-# cmatrix-background
+# terminal-backdrop
 
 *[Read in English](README.md)*
 
-Un script chico para X11 que abre una terminal transparente con el efecto "lluvia digital" de [`cmatrix`](https://github.com/abishekvashok/cmatrix) pegado atrás, a modo de fondo. Movés, redimensionás, minimizás, maximizás o enfocás la terminal y el efecto matrix la sigue automáticamente, como si la terminal fuera transparente de verdad.
+Un script chico para X11 que abre una terminal transparente con **cualquier efecto de terminal en vivo** pegado atrás, a modo de fondo — la lluvia digital de [`cmatrix`](https://github.com/abishekvashok/cmatrix) por defecto, pero funciona con prácticamente cualquier programa de terminal (ver [Usar otra cosa en vez de `cmatrix`](#usar-otra-cosa-en-vez-de-cmatrix) más abajo). Movés, redimensionás, minimizás, maximizás o enfocás la terminal y el efecto de fondo la sigue automáticamente, como si la terminal fuera transparente de verdad.
 
 Es enteramente por eventos (sin bucle de sondeo), así que queda en ~0% de CPU en reposo y reacciona al instante ante eventos de X11.
 
@@ -22,7 +22,7 @@ sudo apt install xterm alacritty wmctrl xdotool x11-utils cmatrix
 - `xterm` — aloja la ventana de fondo con `cmatrix`.
 - `alacritty` — la terminal transparente real y usable, adelante.
 - `wmctrl`, `xdotool` — reposicionan/redimensionan/reordenan la ventana de fondo.
-- `xev`, `xprop` (de `x11-utils`) — escuchan eventos de mover/redimensionar/enfocar/maximizar en vez de sondear en un bucle.
+- `xev`, `xprop`, `xwininfo` (de `x11-utils`) — escuchan eventos de mover/redimensionar/enfocar/maximizar en vez de sondear en un bucle, y miden el tamaño real de decoración de cada ventana para autoalinearse.
 - `cmatrix` — el efecto de lluvia digital en sí.
 
 Funciona en X11 (o XWayland). El script fuerza a `alacritty` a salir de Wayland nativo (`env -u WAYLAND_DISPLAY`) porque necesita consultar/mover la ventana con herramientas de X11.
@@ -87,11 +87,7 @@ No hace falta instalar nada aparte — `ghost-ansi.sh` solo imprime cuadros preg
 
 ## Ajustes
 
-Algunas constantes cerca del principio del script pueden necesitar recalibrarse según tu equipo:
-
-- `OFFSET_X` / `OFFSET_Y` — desfase en píxeles entre las dos ventanas para que el fondo coincida exactamente con el área de contenido de la de adelante (varía según sistema/tema).
-- `OFFSET_X_MAX` / `OFFSET_Y_MAX` — desfase usado mientras está maximizada.
-- `MONITOR3_X_MIN` — se usa para elegir un desfase de maximizado distinto en monitores muy anchos o de alta densidad de píxeles.
+El desfase en píxeles entre las dos ventanas (necesario porque la ventana de fondo sin bordes y la de adelante con decoraciones se renderizan levemente distinto según sistema/tema/monitor) ya no es una constante calibrada a mano — el script lo mide solo al arrancar, comparando la geometría real que reportan ambas ventanas, y lo vuelve a medir por monitor la primera vez que maximizás en cada pantalla. No hay nada que recalibrar manualmente, y se adapta automáticamente a cualquier cantidad de monitores.
 
 ## Licencia
 
